@@ -1,0 +1,169 @@
+from kivy.app import App
+from kivy.uix.floatlayout import FloatLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
+from kivy.uix.image import Image
+from kivy.uix.popup import Popup  # <- важно!
+from kivy.uix.widget import Widget
+from kivy.graphics import Color, Rectangle
+from kivy.clock import Clock
+import time
+
+# ------------------ Перетаскиваемое окно ------------------
+
+class DraggableWindow(FloatLayout):
+    def __init__(self, title="Окно", content=None, taskbar=None, **kwargs):
+        super().__init__(**kwargs)
+        self.size_hint = (0.7, 0.6)
+        self.pos_hint = {"center_x": 0.5, "center_y": 0.6}
+        self.taskbar = taskbar
+
+        with self.canvas:
+            Color(0.9, 0.9, 0.9, 1)
+            self.rect = Rectangle(size=self.size, pos=self.pos)
+
+        self.bind(size=self.update_rect, pos=self.update_rect)
+
+        self.title_bar = Button(
+            text=title,
+            size_hint=(1, 0.15),
+            pos_hint={"x": 0, "top": 1},
+            background_color=(0, 0.3, 0.8, 1)
+        )
+        self.title_bar.bind(on_touch_move=self.move_window)
+        self.add_widget(self.title_bar)
+
+        close_btn = Button(
+            text="X",
+            size_hint=(0.15, 0.15),
+            pos_hint={"right": 1, "top": 1},
+            background_color=(1, 0, 0, 1)
+        )
+        close_btn.bind(on_press=self.close_window)
+        self.add_widget(close_btn)
+
+        if content:
+            content.size_hint = (1, 0.85)
+            content.pos_hint = {"x": 0, "y": 0}
+            self.add_widget(content)
+
+        if taskbar:
+            taskbar.add_window_button(title, self)
+
+    def update_rect(self, *args):
+        self.rect.size = self.size
+        self.rect.pos = self.pos
+
+    def move_window(self, instance, touch):
+        if instance.collide_point(*touch.pos):
+            self.x += touch.dx
+            self.y += touch.dy
+
+    def close_window(self, instance):
+        if self.parent:
+            self.parent.remove_widget(self)
+
+# ------------------ Панель задач ------------------
+
+class Taskbar(FloatLayout):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.size_hint = (1, 0.1)
+        self.pos_hint = {"x": 0, "y": 0}
+
+        with self.canvas:
+            Color(0.2, 0.2, 0.2, 1)
+            self.rect = Rectangle(size=self.size, pos=self.pos)
+
+        self.bind(size=self.update_rect, pos=self.update_rect)
+
+        self.clock_label = Label(
+            text="",
+            size_hint=(0.2, 1),
+            pos_hint={"right": 1, "y": 0}
+        )
+        self.add_widget(self.clock_label)
+        Clock.schedule_interval(self.update_clock, 1)
+
+        self.window_buttons = []
+
+    def update_rect(self, *args):
+        self.rect.size = self.size
+        self.rect.pos = self.pos
+
+    def update_clock(self, dt):
+        self.clock_label.text = time.strftime("%H:%M:%S")
+
+    def add_window_button(self, title, window):
+        btn = Button(
+            text=title,
+            size_hint=(0.2, 1),
+            pos_hint={"x": 0.2 * len(self.window_buttons), "y": 0}
+        )
+        btn.bind(on_press=lambda x: self.toggle_window(window))
+        self.window_buttons.append(btn)
+        self.add_widget(btn)
+
+    def toggle_window(self, window):
+        window.opacity = 1 if window.opacity == 0 else 0
+
+# ------------------ Главное приложение ------------------
+
+class MiniXP(App):
+    def build(self):
+        root = FloatLayout()
+
+        # Обои — можно заменить на "xp.jpg"
+        try:
+            bg = Image(source="xp.jpg", allow_stretch=True, keep_ratio=False)
+        except:
+            bg = Image()  # пустое, если нет файла
+        root.add_widget(bg)
+
+        self.taskbar = Taskbar()
+        root.add_widget(self.taskbar)
+
+        # Кнопка Пуск
+        start_btn = Button(
+            text="Пуск",
+            size_hint=(0.2, 0.1),
+            pos_hint={"x": 0, "y": 0},
+            background_color=(0, 0.6, 0, 1)
+        )
+        start_btn.bind(on_press=self.open_start)
+        root.add_widget(start_btn)
+
+        self.root_layout = root
+        return root
+
+    def open_window(self, title, content):
+        win = DraggableWindow(title=title, content=content, taskbar=self.taskbar)
+        self.root_layout.add_widget(win)
+
+    def open_start(self, instance):
+        layout = FloatLayout()
+
+        programs = [
+            ("Мой компьютер", lambda x: self.open_window("Мой компьютер", Label(text="Диск C:\\\nAndroid Storage"))),
+            ("Блокнот", lambda x: self.open_window("Блокнот", TextInput(multiline=True))),
+            ("Калькулятор", lambda x: self.open_window("Калькулятор", Label(text="2+2=4"))),
+            ("Paint", lambda x: self.open_window("Paint", Label(text="Рисование скоро 😎"))),
+            ("Корзина", lambda x: self.open_window("Корзина", Label(text="Пока пусто"))),
+        ]
+
+        y = 0.8
+        for name, action in programs:
+            btn = Button(
+                text=name,
+                size_hint=(1, 0.18),
+                pos_hint={"x": 0, "y": y}
+            )
+            btn.bind(on_press=action)
+            layout.add_widget(btn)
+            y -= 0.18
+
+        popup = Popup(title="Меню Пуск", content=layout, size_hint=(0.6, 0.6))
+        popup.open()
+
+MiniXP().run()
